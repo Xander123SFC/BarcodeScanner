@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Browser Barcode Scanner — Product List & Export</title>
+  <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;}
+    body{margin:0;padding:12px;display:grid;gap:12px;background:#f7f8fb;color:#111}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+    h1{font-size:18px;margin:0}
+    main{display:grid;grid-template-columns:1fr 360px;gap:12px}
+    .camera-card{background:white;padding:10px;border-radius:10px;box-shadow:0 6px 18px rgba(30,40,60,0.08)}
+    #interactive{width:100%;height:360px;background:#000;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    select,input,button,textarea{font-family:inherit;padding:8px;border-radius:8px;border:1px solid #d7dbe8}
+    button{cursor:pointer}
+    .sidebar{display:flex;flex-direction:column;gap:8px}
+    .panel{background:white;padding:10px;border-radius:10px;box-shadow:0 6px 18px rgba(30,40,60,0.06)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #f0f2f6}
+    .small{font-size:13px;color:#556}
+    .product-json{height:120px;width:100%;resize:vertical}
+    @media (max-width:900px){main{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Browser Barcode Scanner — Product List & Export</h1>
+    <div class="small">Works on phone and laptop. Uses camera. No server required.</div>
+  </header>
+
+  <main>
+    <section>
+      <div class="camera-card">
+        <div id="interactive">Allow camera access to start scanning</div>
+
+        <div class="controls">
+          <select id="cameraSelect"></select>
+          <select id="formatSelect">
+            <option value="ean_reader">EAN / EAN-13</option>
+            <option value="upc_reader">UPC</option>
+            <option value="code_128_reader">Code 128</option>
+            <option value="code_39_reader">Code 39</option>
+            <option value="ean_8_reader">EAN-8</option>
+          </select>
+          <button id="startBtn">Start</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <button id="clearBtn">Clear List</button>
+          <button id="exportCsvBtn">Export CSV</button>
+        </div>
+
+        <div class="small" id="status">Status: idle</div>
+        <div style="margin-top:8px" class="small">Last scanned: <span id="lastScanned">none</span></div>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>Scanned Items</strong>
+          <div class="small">Total items: <span id="totalItems">0</span> | Total amount: <span id="totalAmount">0.00</span></div>
+        </div>
+        <div style="overflow:auto;max-height:260px;margin-top:8px">
+          <table id="cartTable">
+            <thead><tr><th>Code</th><th>Name</th><th>Qty</th><th>Price</th><th>Sub</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <div class="panel">
+        <strong>Product Database (editable)</strong>
+        <div class="small">Use barcode values as keys. Example JSON structure included.</div>
+        <textarea id="productJson" class="product-json"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="loadDbBtn">Load DB</button>
+          <button id="resetDbBtn">Reset Sample DB</button>
+          <button id="importJsonBtn">Import JSON</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <strong>Manual Add / Edit</strong>
+        <div style="display:grid;gap:8px;margin-top:8px">
+          <input id="manualCode" placeholder="Barcode" />
+          <input id="manualName" placeholder="Product name" />
+          <input id="manualPrice" placeholder="Price" type="number" step="0.01" />
+          <button id="manualAddBtn">Add / Update Product</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <strong>Help & Tips</strong>
+        <ul class="small">
+          <li>Use "Start" then point camera at barcode. On phones choose "rear" camera.</li>
+          <li>If scanning duplicates, slow down movement or edit the detectionDebounceTime below.</li>
+          <li>To scan printed labels, ensure good lighting and that the barcode fills part of the view.</li>
+          <li>CSV export includes code,name,qty,price,subtotal.</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    // Sample product database
+    const sampleDB = {
+      "012345678905": { name: "Sample Milk 1L", price: 2.50 },
+      "9780143127796": { name: "Sample Book", price: 12.99 },
+      "4006381333931": { name: "Chocolate Bar", price: 1.20 }
+    };
+
+    // App state
+    let productDB = JSON.parse(JSON.stringify(sampleDB));
+    let cart = {}; // code -> { code, name, price, qty }
+    let lastDetected = null;
+    const detectionDebounceTime = 1200; // ms to ignore same code
+
+    // UI elements
+    const cameraSelect = document.getElementById('cameraSelect');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const productJson = document.getElementById('productJson');
+    const loadDbBtn = document.getElementById('loadDbBtn');
+    const resetDbBtn = document.getElementById('resetDbBtn');
+    const importJsonBtn = document.getElementById('importJsonBtn');
+    const manualAddBtn = document.getElementById('manualAddBtn');
+    const manualCode = document.getElementById('manualCode');
+    const manualName = document.getElementById('manualName');
+    const manualPrice = document.getElementById('manualPrice');
+    const cartTableBody = document.querySelector('#cartTable tbody');
+    const totalItemsSpan = document.getElementById('totalItems');
+    const totalAmountSpan = document.getElementById('totalAmount');
+    const statusEl = document.getElementById('status');
+    const lastScannedEl = document.getElementById('lastScanned');
+    const formatSelect = document.getElementById('formatSelect');
+
+    // Init
+    function resetSampleDb() {
+      productDB = JSON.parse(JSON.stringify(sampleDB));
+      productJson.value = JSON.stringify(productDB, null, 2);
+      saveDbToLocal();
+    }
+
+    function saveDbToLocal() {
+      localStorage.setItem('productDB', JSON.stringify(productDB));
+    }
+
+    function loadDbFromLocal() {
+      const s = localStorage.getItem('productDB');
+      if (s) productDB = JSON.parse(s);
+      productJson.value = JSON.stringify(productDB, null, 2);
+    }
+
+    // cart helpers
+    function addToCartByCode(code) {
+      const now = Date.now();
+      if (lastDetected && lastDetected.code === code && (now - lastDetected.time) < detectionDebounceTime) return; // ignore duplicate
+      lastDetected = { code, time: now };
+
+      const info = productDB[code];
+      if (!info) {
+        status('Unknown product: ' + code);
+        lastScannedEl.textContent = code + ' (unknown)';
+        return;
+      }
+
+      if (!cart[code]) cart[code] = { code, name: info.name, price: Number(info.price), qty: 0 };
+      cart[code].qty += 1;
+      status('Added: ' + info.name);
+      lastScannedEl.textContent = info.name;
+      renderCart();
+    }
+
+    function renderCart() {
+      cartTableBody.innerHTML = '';
+      let totalQty = 0;
+      let totalAmount = 0;
+      Object.values(cart).forEach(item => {
+        const tr = document.createElement('tr');
+        const sub = (item.price * item.qty).toFixed(2);
+        tr.innerHTML = `<td>${item.code}</td><td>${item.name}</td><td>${item.qty}</td><td>${item.price.toFixed(2)}</td><td>${sub}</td>`;
+        cartTableBody.appendChild(tr);
+        totalQty += item.qty;
+        totalAmount += item.qty * item.price;
+      });
+      totalItemsSpan.textContent = totalQty;
+      totalAmountSpan.textContent = totalAmount.toFixed(2);
+    }
+
+    function clearCart() { cart = {}; renderCart(); status('Cart cleared'); lastScannedEl.textContent = 'none'; }
+
+    function status(text) { statusEl.textContent = 'Status: ' + text; }
+
+    // CSV Export
+    function exportCSV() {
+      const rows = [['code','name','qty','price','subtotal']];
+      Object.values(cart).forEach(i => rows.push([i.code, i.name, i.qty, i.price.toFixed(2), (i.qty*i.price).toFixed(2)]));
+      const csv = rows.map(r => r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'scanned_products.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // Camera functions using Quagga2
+    let activeStreamDeviceId = null;
+    async function enumerateCameras() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter(d => d.kind === 'videoinput');
+        cameraSelect.innerHTML = '';
+        cams.forEach((c, idx) => {
+          const opt = document.createElement('option');
+          opt.value = c.deviceId;
+          opt.textContent = c.label || 'Camera ' + (idx+1);
+          cameraSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function startScanner() {
+      const deviceId = cameraSelect.value || null;
+      const reader = formatSelect.value || 'ean_reader';
+      activeStreamDeviceId = deviceId;
+
+      Quagga.init({
+        inputStream: {
+          name: 'Live',
+          type: 'LiveStream',
+          target: document.querySelector('#interactive'),
+          constraints: { facingMode: 'environment', deviceId: deviceId ? { exact: deviceId } : undefined }
+        },
+        locator: { patchSize: 'medium', halfSample: true },
+        decoder: { readers: [reader] },
+        locate: true
+      }, (err) => {
+        if (err) { console.error(err); status('Init error'); return; }
+        Quagga.start();
+        status('Scanning...');
+        startBtn.disabled = true; stopBtn.disabled = false;
+      });
+
+      Quagga.onDetected(result => {
+        try {
+          const code = result.codeResult.code;
+          if (code) addToCartByCode(code);
+        } catch(e) { console.error(e); }
+      });
+    }
+
+    function stopScanner() {
+      try {
+        Quagga.stop();
+        Quagga.offDetected();
+      } catch(e) { console.warn('stop error',e); }
+      status('Stopped');
+      startBtn.disabled = false; stopBtn.disabled = true;
+    }
+
+    // UI wiring
+    startBtn.addEventListener('click', async () => {
+      await enumerateCameras();
+      startScanner();
+    });
+    stopBtn.addEventListener('click', stopScanner);
+    clearBtn.addEventListener('click', clearCart);
+    exportCsvBtn.addEventListener('click', exportCSV);
+
+    loadDbBtn.addEventListener('click', () => {
+      try {
+        const obj = JSON.parse(productJson.value);
+        productDB = obj; saveDbToLocal(); status('Product DB loaded');
+      } catch(e) { status('Invalid JSON'); }
+    });
+
+    resetDbBtn.addEventListener('click', () => { resetSampleDb(); status('Sample DB loaded'); });
+
+    importJsonBtn.addEventListener('click', () => {
+      productJson.select(); document.execCommand('copy'); status('JSON copied to clipboard');
+    });
+
+    manualAddBtn.addEventListener('click', () => {
+      const code = manualCode.value.trim();
+      const name = manualName.value.trim();
+      const price = Number(manualPrice.value);
+      if (!code || !name || Number.isNaN(price)) { status('Please fill code name price'); return; }
+      productDB[code] = { name, price }; saveDbToLocal(); productJson.value = JSON.stringify(productDB, null, 2);
+      status('Product added/updated'); manualCode.value='';manualName.value='';manualPrice.value='';
+    });
+
+    // preload DB and devices
+    loadDbFromLocal();
+    enumerateCameras();
+    resetSampleDb();
+
+    // make product JSON visible
+    productJson.value = JSON.stringify(productDB, null, 2);
+
+    // stop Quagga when leaving page
+    window.addEventListener('pagehide', () => { try { Quagga.stop(); } catch(e){} });
+  </script>
+</body>
+</html>
