@@ -226,34 +226,40 @@
     }
 
     function startScanner() {
-      const deviceId = cameraSelect.value || null;
-      const reader = formatSelect.value || 'ean_reader';
-      activeStreamDeviceId = deviceId;
+  const reader = formatSelect.value || 'ean_reader';
 
-      Quagga.init({
-        inputStream: {
-          name: 'Live',
-          type: 'LiveStream',
-          target: document.querySelector('#interactive'),
-          constraints: { facingMode: 'environment', deviceId: deviceId ? { exact: deviceId } : undefined }
-        },
-        locator: { patchSize: 'medium', halfSample: true },
-        decoder: { readers: [reader] },
-        locate: true
-      }, (err) => {
-        if (err) { console.error(err); status('Init error'); return; }
-        Quagga.start();
-        status('Scanning...');
-        startBtn.disabled = true; stopBtn.disabled = false;
-      });
-
-      Quagga.onDetected(result => {
-        try {
-          const code = result.codeResult.code;
-          if (code) addToCartByCode(code);
-        } catch(e) { console.error(e); }
-      });
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: interactiveDiv,
+      constraints: { 
+        facingMode: { ideal: 'environment' }, // STRICTLY REAR CAMERA
+        width: { min: 640 },
+        height: { min: 480 }
+      }
+    },
+    locator: { patchSize: 'medium', halfSample: true },
+    decoder: { readers: [reader] },
+    locate: true
+  }, (err) => {
+    if (err) {
+      console.error(err);
+      status('Camera error: ' + err.message, 'error');
+      return;
     }
+    Quagga.start();
+    showCameraActive();
+    status('Scanning...', 'active');
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  });
+
+  Quagga.onDetected(result => {
+    const code = result.codeResult.code;
+    if (code) addToCartByCode(code);
+  });
+}
 
     function stopScanner() {
       try {
