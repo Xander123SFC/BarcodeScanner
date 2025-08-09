@@ -6,311 +6,271 @@
   <title>Browser Barcode Scanner — Product List & Export</title>
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
   <style>
-    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;}
-    body{margin:0;padding:12px;display:grid;gap:12px;background:#f7f8fb;color:#111}
-    header{display:flex;gap:12px;align-items:center;justify-content:space-between}
-    h1{font-size:18px;margin:0}
-    main{display:grid;grid-template-columns:1fr 360px;gap:12px}
-    .camera-card{background:white;padding:10px;border-radius:10px;box-shadow:0 6px 18px rgba(30,40,60,0.08)}
-    #interactive{width:100%;height:360px;background:#000;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    :root{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;}
+    body{margin:0;background:#f5f7fb;color:#0f172a}
+    header{background:#0b5fff;color:white;padding:12px 18px;display:flex;align-items:center;gap:12px}
+    header h1{font-size:16px;margin:0}
+    .container{padding:18px;max-width:1100px;margin:18px auto}
+    .card{background:white;border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(12,17,29,0.06);}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:12px}
+    #interactive{width:100%;height:360px;background:#111;border-radius:8px;overflow:hidden}
     .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-    select,input,button,textarea{font-family:inherit;padding:8px;border-radius:8px;border:1px solid #d7dbe8}
-    button{cursor:pointer}
-    .sidebar{display:flex;flex-direction:column;gap:8px}
-    .panel{background:white;padding:10px;border-radius:10px;box-shadow:0 6px 18px rgba(30,40,60,0.06)}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #f0f2f6}
-    .small{font-size:13px;color:#556}
-    .product-json{height:120px;width:100%;resize:vertical}
-    @media (max-width:900px){main{grid-template-columns:1fr}}
+    button, input[type=button]{padding:8px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer}
+    button.primary{background:#0b5fff;color:white;border-color:transparent}
+    .small{font-size:13px;padding:6px 8px}
+    form{display:flex;gap:8px;flex-direction:column}
+    label{font-size:13px}
+    input[type=text], input[type=number]{padding:8px;border-radius:8px;border:1px solid #e6e9ef}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th, td{padding:8px;border-bottom:1px solid #eef2ff;text-align:left}
+    tfoot td{font-weight:600}
+    .actions{display:flex;gap:8px}
+    .muted{color:#6b7280;font-size:13px}
+    .badge{background:#eef2ff;color:#0b5fff;padding:6px 8px;border-radius:999px;font-weight:600}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <header>
-    <h1>Browser Barcode Scanner — Product List & Export</h1>
-    <div class="small">Works on phone and laptop. Uses camera. No server required.</div>
+    <h1>📷 Barcode Scanner — Product List & Export</h1>
+    <div style="margin-left:auto" class="muted">Local demo — saves list to localStorage</div>
   </header>
 
-  <main>
-    <section>
-      <div class="camera-card">
-        <div id="interactive">Allow camera access to start scanning</div>
-
+  <div class="container">
+    <div class="grid">
+      <div class="card">
+        <div id="interactive"></div>
         <div class="controls">
-          <select id="cameraSelect"></select>
-          <select id="formatSelect">
-            <option value="ean_reader">EAN / EAN-13</option>
-            <option value="upc_reader">UPC</option>
-            <option value="code_128_reader">Code 128</option>
-            <option value="code_39_reader">Code 39</option>
-            <option value="ean_8_reader">EAN-8</option>
-          </select>
-          <button id="startBtn">Start</button>
-          <button id="stopBtn" disabled>Stop</button>
-          <button id="clearBtn">Clear List</button>
-          <button id="exportCsvBtn">Export CSV</button>
+          <button id="startBtn" class="primary">Start Scanner</button>
+          <button id="stopBtn" class="small">Stop</button>
+          <button id="clearCamera" class="small">Clear Camera</button>
+          <label style="display:inline-flex;align-items:center;gap:8px" title="When checked, identical barcodes won't be added repeatedly">
+            <input type="checkbox" id="dedupe" checked /> Dedupe
+          </label>
+          <div style="margin-left:auto" class="muted">Detected: <span id="detectedCount">0</span></div>
         </div>
 
-        <div class="small" id="status">Status: idle</div>
-        <div style="margin-top:8px" class="small">Last scanned: <span id="lastScanned">none</span></div>
+        <div style="margin-top:12px;display:flex;gap:12px;align-items:flex-start">
+          <div style="flex:1">
+            <label>Manual scan / paste barcode</label>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <input id="manualCode" type="text" placeholder="e.g. 012345678905" />
+              <button id="addManual" class="small">Add</button>
+            </div>
+            <div style="margin-top:8px" class="muted">You can add a product name and price after adding or edit in the list.</div>
+          </div>
+
+          <div style="width:220px">
+            <label>Import CSV</label>
+            <input id="csvFile" type="file" accept="text/csv" />
+            <div class="muted" style="margin-top:6px">CSV columns: barcode,name,price,qty (header optional)</div>
+          </div>
+        </div>
+
       </div>
 
-      <div class="panel" style="margin-top:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <strong>Scanned Items</strong>
-          <div class="small">Total items: <span id="totalItems">0</span> | Total amount: <span id="totalAmount">0.00</span></div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px">
+          <h3 style="margin:0">Product List</h3>
+          <div class="badge" id="uniqueCount">0</div>
+          <div style="margin-left:auto" class="actions">
+            <button id="exportCsv" class="small">Export CSV</button>
+            <button id="clearList" class="small">Clear List</button>
+          </div>
         </div>
-        <div style="overflow:auto;max-height:260px;margin-top:8px">
-          <table id="cartTable">
-            <thead><tr><th>Code</th><th>Name</th><th>Qty</th><th>Price</th><th>Sub</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
 
-    <aside class="sidebar">
-      <div class="panel">
-        <strong>Product Database (editable)</strong>
-        <div class="small">Use barcode values as keys. Example JSON structure included.</div>
-        <textarea id="productJson" class="product-json"></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button id="loadDbBtn">Load DB</button>
-          <button id="resetDbBtn">Reset Sample DB</button>
-          <button id="importJsonBtn">Import JSON</button>
-        </div>
-      </div>
-
-      <div class="panel">
-        <strong>Manual Add / Edit</strong>
-        <div style="display:grid;gap:8px;margin-top:8px">
-          <input id="manualCode" placeholder="Barcode" />
-          <input id="manualName" placeholder="Product name" />
-          <input id="manualPrice" placeholder="Price" type="number" step="0.01" />
-          <button id="manualAddBtn">Add / Update Product</button>
+        <table id="productTable">
+          <thead>
+            <tr><th>#</th><th>Barcode</th><th>Name</th><th>Price</th><th>Qty</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+          <div class="muted">Saved to localStorage (browser)</div>
+          <div class="muted">Total items: <span id="totalItems">0</span></div>
         </div>
       </div>
 
-      <div class="panel">
-        <strong>Help & Tips</strong>
-        <ul class="small">
-          <li>Use "Start" then point camera at barcode. On phones choose "rear" camera.</li>
-          <li>If scanning duplicates, slow down movement or edit the detectionDebounceTime below.</li>
-          <li>To scan printed labels, ensure good lighting and that the barcode fills part of the view.</li>
-          <li>CSV export includes code,name,qty,price,subtotal.</li>
-        </ul>
-      </div>
-    </aside>
-  </main>
+    </div>
+  </div>
 
-  <script>
-    // Sample product database
-    const sampleDB = {
-      "012345678905": { name: "Sample Milk 1L", price: 2.50 },
-      "9780143127796": { name: "Sample Book", price: 12.99 },
-      "4006381333931": { name: "Chocolate Bar", price: 1.20 }
-    };
+<script>
+// Simple product list manager + Quagga2 scanner
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const clearCamera = document.getElementById('clearCamera');
+const interactive = document.getElementById('interactive');
+const manualCode = document.getElementById('manualCode');
+const addManual = document.getElementById('addManual');
+const productTableBody = document.querySelector('#productTable tbody');
+const exportCsv = document.getElementById('exportCsv');
+const clearList = document.getElementById('clearList');
+const detectedCount = document.getElementById('detectedCount');
+const dedupeCheckbox = document.getElementById('dedupe');
+const uniqueCount = document.getElementById('uniqueCount');
+const totalItems = document.getElementById('totalItems');
+const csvFile = document.getElementById('csvFile');
 
-    // App state
-    let productDB = JSON.parse(JSON.stringify(sampleDB));
-    let cart = {}; // code -> { code, name, price, qty }
-    let lastDetected = null;
-    const detectionDebounceTime = 1200; // ms to ignore same code
+let detectedTotal = 0;
+let products = loadProducts(); // {barcode->{barcode,name,price,qty}}
+renderTable();
+updateStats();
 
-    // UI elements
-    const cameraSelect = document.getElementById('cameraSelect');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const exportCsvBtn = document.getElementById('exportCsvBtn');
-    const productJson = document.getElementById('productJson');
-    const loadDbBtn = document.getElementById('loadDbBtn');
-    const resetDbBtn = document.getElementById('resetDbBtn');
-    const importJsonBtn = document.getElementById('importJsonBtn');
-    const manualAddBtn = document.getElementById('manualAddBtn');
-    const manualCode = document.getElementById('manualCode');
-    const manualName = document.getElementById('manualName');
-    const manualPrice = document.getElementById('manualPrice');
-    const cartTableBody = document.querySelector('#cartTable tbody');
-    const totalItemsSpan = document.getElementById('totalItems');
-    const totalAmountSpan = document.getElementById('totalAmount');
-    const statusEl = document.getElementById('status');
-    const lastScannedEl = document.getElementById('lastScanned');
-    const formatSelect = document.getElementById('formatSelect');
+startBtn.addEventListener('click', startScanner);
+stopBtn.addEventListener('click', stopScanner);
+clearCamera.addEventListener('click', stopScanner);
+addManual.addEventListener('click', ()=>{addScanned(manualCode.value.trim()); manualCode.value='';});
+exportCsv.addEventListener('click', ()=>{downloadCSV();});
+clearList.addEventListener('click', ()=>{if(confirm('Clear product list?')){products={}; saveProducts(); renderTable(); updateStats();}});
+csvFile.addEventListener('change', handleCSVUpload);
 
-    // Init
-    function resetSampleDb() {
-      productDB = JSON.parse(JSON.stringify(sampleDB));
-      productJson.value = JSON.stringify(productDB, null, 2);
-      saveDbToLocal();
-    }
+function startScanner(){
+  if(typeof Quagga === 'undefined'){
+    alert('Quagga library not loaded. Check network or CDN.');
+    return;
+  }
 
-    function saveDbToLocal() {
-      localStorage.setItem('productDB', JSON.stringify(productDB));
-    }
-
-    function loadDbFromLocal() {
-      const s = localStorage.getItem('productDB');
-      if (s) productDB = JSON.parse(s);
-      productJson.value = JSON.stringify(productDB, null, 2);
-    }
-
-    // cart helpers
-    function addToCartByCode(code) {
-      const now = Date.now();
-      if (lastDetected && lastDetected.code === code && (now - lastDetected.time) < detectionDebounceTime) return; // ignore duplicate
-      lastDetected = { code, time: now };
-
-      const info = productDB[code];
-      if (!info) {
-        status('Unknown product: ' + code);
-        lastScannedEl.textContent = code + ' (unknown)';
-        return;
-      }
-
-      if (!cart[code]) cart[code] = { code, name: info.name, price: Number(info.price), qty: 0 };
-      cart[code].qty += 1;
-      status('Added: ' + info.name);
-      lastScannedEl.textContent = info.name;
-      renderCart();
-    }
-
-    function renderCart() {
-      cartTableBody.innerHTML = '';
-      let totalQty = 0;
-      let totalAmount = 0;
-      Object.values(cart).forEach(item => {
-        const tr = document.createElement('tr');
-        const sub = (item.price * item.qty).toFixed(2);
-        tr.innerHTML = `<td>${item.code}</td><td>${item.name}</td><td>${item.qty}</td><td>${item.price.toFixed(2)}</td><td>${sub}</td>`;
-        cartTableBody.appendChild(tr);
-        totalQty += item.qty;
-        totalAmount += item.qty * item.price;
-      });
-      totalItemsSpan.textContent = totalQty;
-      totalAmountSpan.textContent = totalAmount.toFixed(2);
-    }
-
-    function clearCart() { cart = {}; renderCart(); status('Cart cleared'); lastScannedEl.textContent = 'none'; }
-
-    function status(text) { statusEl.textContent = 'Status: ' + text; }
-
-    // CSV Export
-    function exportCSV() {
-      const rows = [['code','name','qty','price','subtotal']];
-      Object.values(cart).forEach(i => rows.push([i.code, i.name, i.qty, i.price.toFixed(2), (i.qty*i.price).toFixed(2)]));
-      const csv = rows.map(r => r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'scanned_products.csv'; a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    // Camera functions using Quagga2
-    let activeStreamDeviceId = null;
-    async function enumerateCameras() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const cams = devices.filter(d => d.kind === 'videoinput');
-        cameraSelect.innerHTML = '';
-        cams.forEach((c, idx) => {
-          const opt = document.createElement('option');
-          opt.value = c.deviceId;
-          opt.textContent = c.label || 'Camera ' + (idx+1);
-          cameraSelect.appendChild(opt);
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    function startScanner() {
-  const reader = formatSelect.value || 'ean_reader';
+  // If already initialized, just start
+  if(Quagga.initialized){
+    Quagga.start();
+    return;
+  }
 
   Quagga.init({
     inputStream: {
       name: 'Live',
       type: 'LiveStream',
-      target: interactiveDiv,
-      constraints: { 
-        facingMode: { ideal: 'environment' }, // STRICTLY REAR CAMERA
-        width: { min: 640 },
-        height: { min: 480 }
+      target: interactive,
+      constraints: {
+        facingMode: 'environment',
+        width: {min: 320, ideal: 1280},
+        height: {min: 240, ideal: 720}
       }
     },
-    locator: { patchSize: 'medium', halfSample: true },
-    decoder: { readers: [reader] },
+    locator: {patchSize: 'large', halfSample: true},
+    numOfWorkers: navigator.hardwareConcurrency ? Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1)) : 2,
+    decoder: {readers: ['ean_reader','ean_8_reader','code_128_reader','upc_reader','upc_e_reader','code_39_reader','code_39_vin_reader']},
     locate: true
-  }, (err) => {
+  }, function(err) {
     if (err) {
       console.error(err);
-      status('Camera error: ' + err.message, 'error');
+      alert('Failed to start camera — allow camera access or use localhost/HTTPS. ' + err.message);
       return;
     }
+    Quagga.initialized = true;
     Quagga.start();
-    showCameraActive();
-    status('Scanning...', 'active');
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
   });
 
-  Quagga.onDetected(result => {
-    const code = result.codeResult.code;
-    if (code) addToCartByCode(code);
-  });
+  Quagga.onDetected(onDetected);
 }
 
-    function stopScanner() {
-      try {
-        Quagga.stop();
-        Quagga.offDetected();
-      } catch(e) { console.warn('stop error',e); }
-      status('Stopped');
-      startBtn.disabled = false; stopBtn.disabled = true;
+function stopScanner(){
+  try{
+    Quagga.stop();
+  }catch(e){}
+}
+
+function onDetected(result){
+  const code = (result && result.codeResult && result.codeResult.code) ? result.codeResult.code : null;
+  if(!code) return;
+  detectedTotal++;
+  detectedCount.textContent = detectedTotal;
+  addScanned(code);
+}
+
+function addScanned(code){
+  if(!code) return;
+  const dedupe = dedupeCheckbox.checked;
+  if(dedupe && products[code]){
+    products[code].qty += 1;
+  } else if(products[code]){
+    products[code].qty += 1;
+  } else {
+    products[code] = {barcode: code, name: '', price: '', qty: 1};
+  }
+  saveProducts();
+  renderTable();
+  updateStats();
+}
+
+function renderTable(){
+  productTableBody.innerHTML = '';
+  let i=0;
+  for(const [barcode, p] of Object.entries(products)){
+    i++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i}</td>
+      <td>${escapeHtml(barcode)}</td>
+      <td><input data-barcode="${escapeHtml(barcode)}" class="edit-name" value="${escapeHtml(p.name)}" placeholder="Product name" /></td>
+      <td><input data-barcode="${escapeHtml(barcode)}" class="edit-price" value="${escapeHtml(p.price)}" placeholder="0.00" /></td>
+      <td><input data-barcode="${escapeHtml(barcode)}" class="edit-qty" type="number" min="0" value="${escapeHtml(p.qty)}" style="width:70px" /></td>
+      <td><button class="small del" data-b="${escapeHtml(barcode)}">Delete</button></td>
+    `;
+    productTableBody.appendChild(tr);
+  }
+
+  // Attach listeners to inputs
+  document.querySelectorAll('.edit-name').forEach(inp=>inp.addEventListener('change', (e)=>{products[e.target.dataset.barcode].name=e.target.value; saveProducts(); renderTable(); updateStats();}));
+  document.querySelectorAll('.edit-price').forEach(inp=>inp.addEventListener('change', (e)=>{products[e.target.dataset.barcode].price=e.target.value; saveProducts(); renderTable(); updateStats();}));
+  document.querySelectorAll('.edit-qty').forEach(inp=>inp.addEventListener('change', (e)=>{const v=parseInt(e.target.value)||0; products[e.target.dataset.barcode].qty=v; if(v<=0) delete products[e.target.dataset.barcode]; saveProducts(); renderTable(); updateStats();}));
+  document.querySelectorAll('.del').forEach(btn=>btn.addEventListener('click', (e)=>{const b=e.target.dataset.b; delete products[b]; saveProducts(); renderTable(); updateStats();}));
+}
+
+function saveProducts(){
+  try{ localStorage.setItem('barcode_products', JSON.stringify(products)); }catch(e){console.warn('localStorage set failed',e);} 
+}
+
+function loadProducts(){
+  try{ const raw = localStorage.getItem('barcode_products'); return raw ? JSON.parse(raw) : {}; } catch(e){return {};}
+}
+
+function updateStats(){
+  uniqueCount.textContent = Object.keys(products).length;
+  totalItems.textContent = Object.values(products).reduce((s,p)=>s + (parseInt(p.qty)||0), 0);
+}
+
+function downloadCSV(){
+  const rows = [['barcode','name','price','qty']];
+  for(const p of Object.values(products)) rows.push([p.barcode, p.name || '', p.price || '', p.qty || 0]);
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""') }"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'products.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+function handleCSVUpload(e){
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = function(){
+    const txt = reader.result;
+    // naive CSV parse: split lines, then commas (handles quoted fields)
+    const lines = txt.split(/\r?\n/).filter(l=>l.trim());
+    for(const line of lines){
+      const cols = parseCSVLine(line);
+      // Accept either 1 col (barcode) or 4 cols (barcode,name,price,qty)
+      if(cols.length===1){ const b=cols[0].trim(); if(b){ products[b]= products[b]||{barcode:b,name:'',price:'',qty:1}; } }
+      else {
+        const b = cols[0].trim(); if(!b) continue;
+        const name = cols[1] ? cols[1].trim() : '';
+        const price = cols[2] ? cols[2].trim() : '';
+        const qty = cols[3] ? parseInt(cols[3])||1 : 1;
+        products[b] = products[b] || {barcode:b,name,price,qty};
+      }
     }
+    saveProducts(); renderTable(); updateStats();
+  };
+  reader.readAsText(f);
+}
 
-    // UI wiring
-    startBtn.addEventListener('click', async () => {
-      await enumerateCameras();
-      startScanner();
-    });
-    stopBtn.addEventListener('click', stopScanner);
-    clearBtn.addEventListener('click', clearCart);
-    exportCsvBtn.addEventListener('click', exportCSV);
+function parseCSVLine(line){
+  const result=[]; let cur=''; let inQuotes=false; for(let i=0;i<line.length;i++){ const ch=line[i]; if(ch==='"'){ if(inQuotes && line[i+1]==='"'){ cur+='"'; i++; } else { inQuotes=!inQuotes; } } else if(ch===',' && !inQuotes){ result.push(cur); cur=''; } else cur+=ch; } result.push(cur); return result;
+}
 
-    loadDbBtn.addEventListener('click', () => {
-      try {
-        const obj = JSON.parse(productJson.value);
-        productDB = obj; saveDbToLocal(); status('Product DB loaded');
-      } catch(e) { status('Invalid JSON'); }
-    });
+function escapeHtml(s){ if(s===undefined||s===null) return ''; return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-    resetDbBtn.addEventListener('click', () => { resetSampleDb(); status('Sample DB loaded'); });
+</script>
 
-    importJsonBtn.addEventListener('click', () => {
-      productJson.select(); document.execCommand('copy'); status('JSON copied to clipboard');
-    });
-
-    manualAddBtn.addEventListener('click', () => {
-      const code = manualCode.value.trim();
-      const name = manualName.value.trim();
-      const price = Number(manualPrice.value);
-      if (!code || !name || Number.isNaN(price)) { status('Please fill code name price'); return; }
-      productDB[code] = { name, price }; saveDbToLocal(); productJson.value = JSON.stringify(productDB, null, 2);
-      status('Product added/updated'); manualCode.value='';manualName.value='';manualPrice.value='';
-    });
-
-    // preload DB and devices
-    loadDbFromLocal();
-    enumerateCameras();
-    resetSampleDb();
-
-    // make product JSON visible
-    productJson.value = JSON.stringify(productDB, null, 2);
-
-    // stop Quagga when leaving page
-    window.addEventListener('pagehide', () => { try { Quagga.stop(); } catch(e){} });
-  </script>
 </body>
 </html>
